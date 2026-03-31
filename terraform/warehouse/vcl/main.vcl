@@ -2,7 +2,10 @@ sub vcl_recv {
     # Require authentication for curl -XPURGE requests.
     set req.http.Fastly-Purge-Requires-Auth = "1";
 
-    # Disallow client provided Fastly-Client-IP headers
+    # Disallow client provided internal headers
+    unset req.http.X-Origin-5xx;
+    unset req.http.X-Origin-Status;
+
     if (fastly.ff.visits_this_service == 0 && req.restarts == 0) {
       set req.http.Fastly-Client-IP = client.ip;
 
@@ -375,6 +378,11 @@ sub vcl_fetch {
 
     # Handle 5XX (or any other unwanted status code)
     if (beresp.status >= 500 && beresp.status < 600) {
+        # Flag for logging — must be set BEFORE stale/restart
+        # req.http.* headers persist across restarts and into vcl_log
+        set req.http.X-Origin-5xx = "true";
+        set req.http.X-Origin-Status = beresp.status;
+
         # Deliver stale if the object is available
         if (stale.exists) {
             return(deliver_stale);
