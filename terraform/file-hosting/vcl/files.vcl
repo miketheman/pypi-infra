@@ -90,6 +90,14 @@ sub vcl_recv {
     # Requests that are for an *actual* file get disaptched to object storage instead of
     # to our typical backends.
 
+    # Handle CORS preflight for browser-based tooling.
+    # Range triggers preflight because it is not a CORS-safelisted header.
+    if (req.request == "OPTIONS" &&
+        req.http.Origin &&
+        req.http.Access-Control-Request-Method) {
+      error 204 "CORS preflight";
+    }
+
     # Do not bother to attempt to run the caching mechanisms for methods that
     # are not generally safe to cache.
     if (req.request != "HEAD" &&
@@ -516,8 +524,9 @@ sub vcl_deliver {
         # We want to set CORS headers allowing files to be loaded cross-origin
         unset resp.http.X-Permitted-Cross-Domain-Policies;
         set resp.http.Access-Control-Allow-Methods = "GET, OPTIONS";
-        set resp.http.Access-Control-Allow-Headers= "Range";
+        set resp.http.Access-Control-Allow-Headers = "Range";
         set resp.http.Access-Control-Allow-Origin = "*";
+        set resp.http.Access-Control-Expose-Headers = "Content-Length, Content-Range, Accept-Ranges";
     }
 
     # Rename or unset a few headers to send to clients.
@@ -569,6 +578,15 @@ sub vcl_error {
         set obj.response = "SNI is required";
         set obj.http.Content-Type = "text/plain; charset=UTF-8";
         synthetic {"SNI is required."};
+        return (deliver);
+    }
+
+    if (obj.status == 204 && obj.response == "CORS preflight") {
+        set obj.http.Access-Control-Allow-Origin = "*";
+        set obj.http.Access-Control-Allow-Methods = "GET, HEAD, OPTIONS";
+        set obj.http.Access-Control-Allow-Headers = "Range, Accept-Encoding";
+        set obj.http.Access-Control-Max-Age = "86400";
+        set obj.http.Content-Length = "0";
         return (deliver);
     }
 
