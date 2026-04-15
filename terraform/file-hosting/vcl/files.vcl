@@ -94,7 +94,8 @@ sub vcl_recv {
     # Range triggers preflight because it is not a CORS-safelisted header.
     if (req.request == "OPTIONS" &&
         req.http.Origin &&
-        req.http.Access-Control-Request-Method) {
+        req.http.Access-Control-Request-Method &&
+        req.url ~ "^/packages/[a-f0-9]{2}/[a-f0-9]{2}/[a-f0-9]{60}/") {
       error 204 "CORS preflight";
     }
 
@@ -587,6 +588,7 @@ sub vcl_error {
         set obj.http.Access-Control-Allow-Headers = "Range, Accept-Encoding";
         set obj.http.Access-Control-Max-Age = "86400";
         set obj.http.Content-Length = "0";
+        synthetic {""};
         return (deliver);
     }
 
